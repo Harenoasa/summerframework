@@ -1,0 +1,71 @@
+############################
+# OS / System
+############################
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+
+############################
+# Logs / Temp
+############################
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+
+############################
+# Environment / Secrets
+############################
+.env
+.env.*
+*.secret
+*.key
+
+############################
+# IDE - IntelliJ IDEA
+############################
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+############################
+# IDE - VS Code
+############################
+.vscode/
+!.vscode/extensions.json
+
+############################
+# Build Outputs (Common)
+############################
+target/
+build/
+dist/
+bin/
+
+############################
+# Dependency Caches
+############################
+node_modules/
+.gradle/
+.mvn/wrapper/maven-wrapper.jar
+
+############################
+# Git
+############################
+*.orig
+*.rej
+
+############################
+# Coverage / Reports
+############################
+coverage/
+*.lcov
+*.out
+
