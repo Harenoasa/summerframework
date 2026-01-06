@@ -2,7 +2,8 @@ package org.harenoasa.summerframework.summer.io;
 
 
 import org.harenoasa.summerframework.config.ResourceResolver;
-import org.junit.jupiter.api.Test;
+import org.junit.Test;
+
 
 import java.util.Collections;
 import java.util.List;
@@ -11,7 +12,7 @@ public class ResourceResolverTest {
 
     @Test
     public void scanClass() {
-        var pkg = "com.itranswarp.scan";
+        var pkg = "org";
         var rr = new ResourceResolver(pkg);
         List<String> classes = rr.scan(res -> {
             String name = res.name();
@@ -21,7 +22,9 @@ public class ResourceResolverTest {
             return null;
         });
         Collections.sort(classes);
-        System.out.println(classes);
+        classes.stream().forEach(item -> {
+            System.out.println("item name : "  + item);
+        });
     }
 
 }
