@@ -12,7 +12,7 @@ public class ResourceResolverTest {
 
     @Test
     public void scanClass() {
-        var pkg = "org";
+        var pkg = "org.junit";
         var rr = new ResourceResolver(pkg);
         List<String> classes = rr.scan(res -> {
             String name = res.name();
