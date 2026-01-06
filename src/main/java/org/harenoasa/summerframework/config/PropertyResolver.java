@@ -59,7 +59,18 @@ public class PropertyResolver {
         return value;
     }
     public <T> T getProperty(String key, Class<T> type){
-
+        String value = getProperty(key);
+        if (value == null){
+            return null;
+        }
+        return convert(targetType, value);
+    }
+    public <T> T convert(Class<T> clazz,String value){
+        Function<String ,Object> fn  = converters.get(clazz);
+        if(fn == null){
+            throw new IllegalArgumentException("Unsupported value type:" + clazz.getName());
+        }
+        return (T) fn.apply(value);
     }
     public String getRquiredProperty(String key,String defaultValue){
         String value = properties.get(key);
