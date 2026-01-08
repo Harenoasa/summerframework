@@ -49,16 +49,18 @@ public class PropertyResolver {
     public String getProperty(String key){
         PropertyExpr keyExpr = parsePropertyExpr(key);
         String property;
-        if (keyExpr != null)
-            property = getRquiredProperty(keyExpr.key(),keyExpr.defaultValue());
-        else
-            property = getRquiredProperty(key);
-        String value = properties.get(key);
-        if (value != null)
-            return parseValue(value);
-        return value;
+        if(keyExpr != null){
+            if (keyExpr.defaultValue() != null)
+                property = getRquiredProperty(keyExpr.key(),keyExpr.defaultValue());
+            else
+                property = getRquiredProperty(keyExpr.key());
+            if (property != null)
+                return getProperty(property);
+            throw new NullPointerException("property not found for key : " + key);
+        }
+        return key;
     }
-    public <T> T getProperty(String key, Class<T> type){
+    public <T> T getProperty(String key, Class<T> targetType){
         String value = getProperty(key);
         if (value == null){
             return null;
@@ -66,11 +68,9 @@ public class PropertyResolver {
         return convert(targetType, value);
     }
     public <T> T convert(Class<T> clazz,String value){
-        Function<String ,Object> fn  = converters.get(clazz);
-        if(fn == null){
-            throw new IllegalArgumentException("Unsupported value type:" + clazz.getName());
-        }
-        return (T) fn.apply(value);
+        Function<String, Object> convertFunc = converters.get(clazz);
+        Object apply = convertFunc.apply(value);
+        return apply == null ? null : (T)apply;
     }
     public String getRquiredProperty(String key,String defaultValue){
         String value = properties.get(key);
@@ -91,20 +91,6 @@ public class PropertyResolver {
                 return new PropertyExpr(k,key.substring(n+1, key.length() - 1));
             }
         }
-        throw new IllegalArgumentException("Invalid arguments: " + key);
+        return null;
     }
-
-    String parseValue(String value){
-        PropertyExpr expr = parsePropertyExpr(value);
-        if (expr == null ){
-            return value;
-        }
-        if(expr.defaultValue() != null){
-            return getRquiredProperty(expr.key(), expr.defaultValue());
-        } else {
-            return getRquiredProperty(expr.key());
-        }
-    }
-
-
 }

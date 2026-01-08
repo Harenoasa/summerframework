@@ -1,0 +1,3 @@
+app:
+  title: Summer Framework
+  version: ${VER:1.0}
