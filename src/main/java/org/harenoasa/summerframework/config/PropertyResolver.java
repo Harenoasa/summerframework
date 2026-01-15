@@ -1,10 +1,6 @@
 package org.harenoasa.summerframework.config;
 
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
 import org.harenoasa.summerframework.entity.PropertyExpr;
-import org.slf4j.LoggerFactory;
 
 import java.time.*;
 import java.util.*;
@@ -20,7 +16,6 @@ public class PropertyResolver {
         props.forEach((key, value) -> this.properties.put(key.toString(), value.toString()));
         ArrayList<String> keys = new ArrayList<>(properties.keySet());
         Collections.sort(keys);
-        keys.forEach(key -> System.out.printf("PropertyResolver: {%s} = {%s}",key,properties.get(key)));
         converters.put(String.class, s -> s);
         converters.put(boolean.class, Boolean::parseBoolean);
         converters.put(Boolean.class, Boolean::valueOf);
@@ -51,9 +46,9 @@ public class PropertyResolver {
         String property;
         if(keyExpr != null){
             if (keyExpr.defaultValue() != null)
-                property = getRquiredProperty(keyExpr.key(),keyExpr.defaultValue());
+                property = getRequiredProperty(keyExpr.key(),keyExpr.defaultValue());
             else
-                property = getRquiredProperty(keyExpr.key());
+                property = getRequiredProperty(keyExpr.key());
             if (property != null)
                 return getProperty(property);
             throw new NullPointerException("property not found for key : " + key);
@@ -72,11 +67,15 @@ public class PropertyResolver {
         Object apply = convertFunc.apply(value);
         return apply == null ? null : (T)apply;
     }
-    public String getRquiredProperty(String key,String defaultValue){
+    public String getRequiredProperty(String key, String defaultValue){
         String value = properties.get(key);
         return value != null ? value : defaultValue;
     }
-    public String getRquiredProperty(String key){
+    public <T> T getRequiredProperty(String key, Class<T> targetType) {
+        T value = getProperty(key, targetType);
+        return Objects.requireNonNull(value, "Property '" + key + "' not found.");
+    }
+    public String getRequiredProperty(String key){
         return properties.get(key);
     }
 

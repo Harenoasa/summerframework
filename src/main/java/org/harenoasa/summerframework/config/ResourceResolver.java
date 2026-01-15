@@ -41,31 +41,26 @@ public class ResourceResolver {
     }
 
     <R> void scan0(String basePackagePath, String path, List<R> collector, Function<Resource, R> mapper) throws Exception {
-        System.out.println("scanning " + path);
+//        System.out.println("scanning " + path);
         Enumeration<URL> en = getClassLoader().getResources(path);
         int i = 0;
+//        System.out.println("scanning " + path);
         ArrayList<URL> urls = new ArrayList<>();
         while(en.hasMoreElements()) {
             URL url = en.nextElement();
             urls.add(url);
-            System.out.println("url: " + url);
             URI uri = url.toURI();
-            System.out.println("uri: " + uri);
             String uriStr = removeTrailingSlash(uri.toString());
             String uriBaseStr = uriStr.substring(0, uriStr.length() - basePackagePath.length());
-            System.out.println("uriBaseStr: " + uriBaseStr);
-            if(uriBaseStr.startsWith("file:")) {
+            if(uriBaseStr.startsWith("file:"))
                 uriBaseStr = uriBaseStr.substring(5);
-            }
-            if(uriBaseStr.startsWith("jar:")) {
+            if(uriBaseStr.startsWith("jar:"))
                 scanFile(true, uriBaseStr, jarUriToPath(basePackagePath, uri),collector, mapper);
-            }else {
+            else
                 scanFile(false, uriBaseStr, Paths.get(uri),collector, mapper);
-            }
+
             i++;
         }
-        System.out.println("count on elements : ["+ i+"]");
-        urls.stream().forEach(url -> System.out.println("url : " + url));
     }
 
     <R> void scanFile(boolean isJar,String base, Path root, List<R> collector, Function<Resource, R> mapper)throws IOException {
@@ -79,7 +74,7 @@ public class ResourceResolver {
                 String name = removeLeadingSlash(path.substring(baseDir.length()));
                 res = new Resource("file:"+path,name);
             }
-            logger.atDebug().log("found  resource: {} ",res);
+
             R r = mapper.apply(res);
             if(r != null) {
                 collector.add(r);

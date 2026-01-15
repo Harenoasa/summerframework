@@ -22,9 +22,9 @@ public class ResourceResolverTest {
             return null;
         });
         Collections.sort(classes);
-        classes.stream().forEach(item -> {
-            System.out.println("item name : "  + item);
-        });
+//        classes.stream().forEach(item -> {
+//            System.out.println("item name : "  + item);
+//        });
     }
 
 }
