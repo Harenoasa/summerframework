@@ -6,6 +6,7 @@ import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.harenoasa.summerframework.config.PropertyResolver;
 import org.harenoasa.summerframework.config.ResourceResolver;
+import org.harenoasa.summerframework.context.ConfigurableApplicationContext;
 import org.harenoasa.summerframework.entity.exception.*;
 import org.harenoasa.summerframework.util.ClassUtils;
 
@@ -15,10 +16,11 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class AnnotationConfigApplicationContext {
+public class AnnotationConfigApplicationContext implements ConfigurableApplicationContext {
     protected final PropertyResolver propertyResolver;
     protected final Map<String, BeanDefinition> beans;
-    Set<String> creatingBeanNames;
+    private List<BeanPostProcessor> beanPostProcessors = new ArrayList<>();
+    private Set<String> creatingBeanNames;
 
     public AnnotationConfigApplicationContext(Class<?> configClass, PropertyResolver propertyResolver) {
         this.propertyResolver = propertyResolver;
@@ -32,6 +34,18 @@ public class AnnotationConfigApplicationContext {
                     createBeanAsEarlySingleton(def);
                     return def.getName();
                 }).toList();
+        List<BeanPostProcessor> processors = beans.values().stream()
+                .filter(this::isBeanPostProcessorDefinition)
+                .sorted()
+                .map(def -> (BeanPostProcessor) createBeanAsEarlySingleton(def)).toList();
+        beanPostProcessors.addAll(processors);
+        createNormalBeans();
+
+        beans.values().forEach(this::injectBean);
+        beans.values().forEach(this::initBean);
+
+    }
+    void createNormalBeans(){
         List<BeanDefinition> defs = this.beans.values().stream()
                 .filter(def -> def.getInstance() == null)
                 .sorted().toList();
@@ -40,12 +54,170 @@ public class AnnotationConfigApplicationContext {
                 createBeanAsEarlySingleton(def);
             }
         });
+    }
+    boolean isBeanPostProcessorDefinition(BeanDefinition def){
+        return BeanPostProcessor.class.isAssignableFrom(def.getBeanClass());
+    }
+
+    void callMethod(Object beanInstance, Method method, String namedMethod){
+        if (method != null){
+            try{
+                method.invoke(beanInstance);
+            }catch (ReflectiveOperationException e) {
+                throw new RuntimeException(e);
+            }
+        }else if( namedMethod!= null){
+            Method named = ClassUtils.getNamedMethod(beanInstance.getClass(), namedMethod);
+            named.setAccessible(true);
+            try{
+                named.invoke(beanInstance);
+            } catch (ReflectiveOperationException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+    void initBean(BeanDefinition def){
+        callMethod(def.getInstance(), def.getInitMethod(), def.getInitMethodName());
+    }
+
+    void injectBean(BeanDefinition def){
+        Object beanInstance = getProxiedInstance(def);
+        try {
+            injectProperties(def, def.getBeanClass(), beanInstance);
+        } catch (ReflectiveOperationException e) {
+            throw new BeanCreationException(e);
+        }
+    }
+
+    private Object getProxiedInstance(BeanDefinition def){
+        Object beanInstance = def.getInstance();
+        List<BeanPostProcessor> reversedBeanPostProcessors = new ArrayList<>(beanPostProcessors);
+        Collections.reverse(reversedBeanPostProcessors);
+        for (BeanPostProcessor beanPostProcessor : reversedBeanPostProcessors) {
+            Object restoredInstance = beanPostProcessor.postProcessOnSetProperty(beanInstance, def.getName());
+            if (restoredInstance != beanInstance) {
+                beanInstance = restoredInstance;
+                log.debug("BeanPostProcessor {} specified injection from {} to {}.", beanPostProcessor.getClass().getSimpleName(),
+                        beanInstance.getClass().getSimpleName(), restoredInstance.getClass().getSimpleName());
+            }
+        }
+        return beanInstance;
+     }
+    private void injectProperties(BeanDefinition def, Class<?> clazz, Object bean) throws ReflectiveOperationException {
+        for (Field f : clazz.getDeclaredFields()) {
+            tryInjectProperties(def, clazz, bean, f);
+        }
+        for (Method m : clazz.getDeclaredMethods()) {
+            tryInjectProperties(def, clazz, bean, m);
+        }
+        Class<?> superClazz = clazz.getSuperclass();
+        if(superClazz != null){
+            injectProperties(def, superClazz , bean);
+        }
 
     }
+
+    private void tryInjectProperties(BeanDefinition def, Class<?> clazz, Object bean, AccessibleObject acc) throws IllegalAccessException, InvocationTargetException {
+        Value value = acc.getAnnotation(Value.class);
+        Autowired autowired = acc.getAnnotation(Autowired.class);
+        if(value == null && autowired == null)return ;
+
+        Field field = null;
+        Method method = null;
+        if(acc instanceof Field f){
+            checkFieldOrMethod(f);
+            f.setAccessible(true);
+            field = f;
+        }
+        if(acc instanceof Method m){
+            checkFieldOrMethod(m);
+            if (m.getParameters().length != 1) {
+                throw new BeanDefinitionException(
+                        String.format("Cannot inject a non-setter method %s for bean '%s': %s", m.getName(), def.getName(), def.getBeanClass().getName()));
+            }
+            m.setAccessible(true);
+            method = m;
+        }
+
+        String accessibleName = field != null ? field.getName() : method.getName();
+        Class<?> accessibleType = field != null ? field.getType() : method.getParameterTypes()[0];
+
+        if (value != null && autowired != null) {
+            throw new BeanCreationException(String.format("Cannot specify both @Autowired and @Value when inject %s.%s for bean '%s': %s",
+                    clazz.getSimpleName(), accessibleName, def.getName(), def.getBeanClass().getName()));
+        }
+
+        if(value !=null )
+        {
+            if(autowired != null) throw new BeanCreationException(String.format("Cannot specify both @Autowired and @Value when inject %s.%s for bean '%s': %s",
+                    clazz.getSimpleName(), accessibleName, def.getName(), def.getBeanClass().getName()));
+            Object propValue = propertyResolver.getRequiredProperty(value.value(), accessibleType);
+            if (field != null) {
+                log.debug("Field injection: {}.{} = {}", def.getBeanClass().getName(), accessibleName, propValue);
+                field.set(bean, propValue);
+            }
+            if (method != null) {
+                log.debug("Method injection: {}.{} ({})", def.getBeanClass().getName(), accessibleName, propValue);
+                method.invoke(bean, propValue);
+            }
+
+        }else if(autowired != null){
+            String name = autowired.name();
+            boolean required = autowired.value();
+            Object depends = name.isEmpty() ? findBean(accessibleType) : findBean(accessibleType, name);
+            if(required && depends == null)
+                throw new UnsatisfiedDependencyException(String.format("Dependency bean not found when inject %s.%s for bean '%s': %s", clazz.getSimpleName(),
+                        accessibleName, def.getName(), def.getBeanClass().getName()));
+            if(depends != null){
+                if (field != null){
+                    field.set(bean, depends);
+                    log.debug("Field injection: {}.{} = {}", def.getBeanClass().getName(), accessibleName, depends);
+                }
+                if(method != null){
+                    method.invoke(bean,depends);
+                    log.debug("Method injecttion , {}.{} = {}",def.getBeanClass().getName(), accessibleName, depends);
+                }
+            }
+        }
+    }
+    protected <T> T findBean(Class<T> requiredType, String name){
+        BeanDefinition def = findBeanDefinition(name, requiredType);
+        if(def == null)return null;
+        return (T) def.getRequiredInstance();
+    }
+
+    protected <T> T findBean(Class<T>requiredType){
+        BeanDefinition def  = findBeanDefinition(requiredType);
+        if(def == null){
+            return null;
+        }
+        return (T) def.getRequiredInstance();
+    }
+
+
+    private void checkFieldOrMethod(Member m) {
+        int mod = m.getModifiers();
+        if (Modifier.isStatic(mod))
+            throw new BeanDefinitionException("Cannot inject static method: "+ m);
+        if (Modifier.isFinal(mod)) {
+            if (m instanceof Field field)
+                throw new BeanDefinitionException("Cannot inject final field: " + field);
+        }
+        if (m instanceof Method method) {
+            log.warn(
+                    "Inject final method should be careful because it is not called on target bean when bean is proxied and may cause NullPointerException.");
+        }
+    }
+
     boolean isConfigurationDefinition(BeanDefinition def){
         return ClassUtils.getAnnotation(def.getBeanClass(), Configuration.class) != null;
     }
 
+    /**
+     * 提供形式参数
+     * @param def
+     * @return
+     */
     public Object createBeanAsEarlySingleton(BeanDefinition def) {
         if(!creatingBeanNames.add(def.getName()))
             throw new UnsatisfiedLinkError(String.format("Circular dependency detected when create bean '%s'", def.getName()));
@@ -62,7 +234,7 @@ public class AnnotationConfigApplicationContext {
 
             final boolean isConfiguration = isConfigurationDefinition(def);
             if (isConfiguration && autowired != null)
-                String.format("Cannot specify @Autowired when create @Configuration bean '%s': %s.", def.getName(), def.getBeanClass().getName()));
+                String.format("Cannot specify @Autowired when create @Configuration bean '%s': %s.", def.getName(), def.getBeanClass().getName());
             if(value != null && autowired != null)
                 throw new BeanCreationException(String.format("Cannot specify both @Autowired and @Value when create bean '%s': %s.", def.getName(), def.getBeanClass().getName()));
             if (value == null && autowired == null) {
@@ -92,7 +264,7 @@ public class AnnotationConfigApplicationContext {
         }
 
         Object instance = null;
-        if( def.getFactoryName() == null){
+        if(def.getFactoryName() == null){
             try{
                 instance = def.getConstructor().newInstance(args);
             }catch(Exception e){
@@ -107,7 +279,32 @@ public class AnnotationConfigApplicationContext {
             }
         }
         def.setInstance(instance);
+
+        for (BeanPostProcessor processor : beanPostProcessors) {
+            Object processed = processor.postProcessBeforeInitialization(def.getInstance(), def.getName());
+            if (processed == null) {
+                throw new BeanCreationException(String.format("PostBeanProcessor returns null when process bean '%s' by %s", def.getName(), processor));
+            }
+            if (def.getInstance() != processed) {
+                def.setInstance(processed);
+            }
+        }
+
         return def.getInstance();
+    }
+
+    @Override
+    public <T> T getBean(String name, Class<T> requiredType) {
+        T t = findBean(requiredType, name);
+        if(t == null)
+            throw new NoSuchBeanDefinitionException(String.format("No bean defined with name '%s' and type '%s'.", name, requiredType));
+        return t;
+    }
+
+    public <T> T getBean(Class<T> requiredType){
+        BeanDefinition def = beans.get(ClassUtils.getBeanName(requiredType));
+        return (T) def.getRequiredInstance();
+
     }
 
     public <T> T getBean(String name){
@@ -158,7 +355,7 @@ public class AnnotationConfigApplicationContext {
                 continue;
             Component component = ClassUtils.getAnnotation(clazz, Component.class);
             if (component != null) {
-                log.info("found component: {}", clazz.getName());
+//                log.info("found component: {}", clazz.getName());
                 int mod = clazz.getModifiers();
                 if(Modifier.isAbstract(mod))
                     throw new BeanDefinitionException("@Component class can not be abstract: " + clazz.getName() + "must not be abstract");
@@ -259,6 +456,7 @@ public class AnnotationConfigApplicationContext {
             throw new BeanNotOfRequiredTypeException(String.format("Autowire required type '%s' but bean '%s' has actual type '%s'.", requiredType.getName(),
                     name, def.getBeanClass().getName()));
         }
+        return def;
     }
     public List<BeanDefinition> findBeanDefinitions(Class<?> type){
         return beans.values().stream().filter(definition -> type.isAssignableFrom(definition.getBeanClass()))
@@ -275,5 +473,23 @@ public class AnnotationConfigApplicationContext {
         if(primarys.isEmpty()) throw new NoUniqueBeanDefinitionException(String.format("Multipl bean with type '%s' found, but no @Primary specified.",type.getName()));
         throw new NoUniqueBeanDefinitionException(String.format("Multipl bean with type '%s' found, and @Primary specified.",type.getName()));
 
+    }
+
+
+    @Override
+    public boolean containsBean(String name) {
+        return beans.containsKey(name);
+    }
+
+
+
+    @Override
+    public void close() {
+        log.info("closing{}...",getClass().getName());
+        beans.values().forEach(def -> {
+            Object beanInstance = getProxiedInstance(def);
+            callMethod(beanInstance, def.getDestroyMethod(), def.getDestroyMethodName());
+        });
+        beans.clear();
     }
 }

@@ -166,4 +166,6 @@ public class BeanDefinition  implements Comparable<BeanDefinition> {
             return cmp;
         }
         return this.name.compareTo(def.name);
-    }}
+    }
+
+}
