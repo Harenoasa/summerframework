@@ -6,6 +6,7 @@ import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.harenoasa.summerframework.config.PropertyResolver;
 import org.harenoasa.summerframework.config.ResourceResolver;
+import org.harenoasa.summerframework.context.ApplicationContextUtils;
 import org.harenoasa.summerframework.context.ConfigurableApplicationContext;
 import org.harenoasa.summerframework.entity.exception.*;
 import org.harenoasa.summerframework.util.ClassUtils;
@@ -23,6 +24,7 @@ public class AnnotationConfigApplicationContext implements ConfigurableApplicati
     private Set<String> creatingBeanNames;
 
     public AnnotationConfigApplicationContext(Class<?> configClass, PropertyResolver propertyResolver) {
+        ApplicationContextUtils.setApplicationContext(this);
         this.propertyResolver = propertyResolver;
         Set<String> beanClassNames = scanForClassNames(configClass);
         beans = createBeanDefinitions(beanClassNames);
@@ -491,5 +493,6 @@ public class AnnotationConfigApplicationContext implements ConfigurableApplicati
             callMethod(beanInstance, def.getDestroyMethod(), def.getDestroyMethodName());
         });
         beans.clear();
+        ApplicationContextUtils.setApplicationContext(null);
     }
 }
