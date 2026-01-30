@@ -1,3 +1,9 @@
 app:
   title: Summer Framework
   version: ${VER:1.0}
+summer:
+  datasource:
+    url: jdbc:mysql://localhost:3306/apseigyopoc
+    driver-class-name: org.sqlite.JDBC
+    username: sa
+    password:
