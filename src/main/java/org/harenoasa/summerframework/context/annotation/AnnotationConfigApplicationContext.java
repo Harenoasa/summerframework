@@ -277,7 +277,8 @@ public class AnnotationConfigApplicationContext implements ConfigurableApplicati
             try{
                 instance = def.getFactoryMethod().invoke(configInstance, args);
             }catch(Exception e){
-                throw new BeanCreationException(String.format("Exception when create bean '%s' : '%s'", def.getName(),def.getBeanClass().getName()),e);
+                e.printStackTrace();
+                throw new BeanCreationException(String.format("Exception when create bean '%s' : '%s'", def.getName(),def.getBeanClass().getName()));
             }
         }
         def.setInstance(instance);

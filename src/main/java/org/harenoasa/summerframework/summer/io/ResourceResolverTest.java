@@ -8,7 +8,7 @@ import org.junit.Test;
 import java.util.Collections;
 import java.util.List;
 
-public class ResourceResolverTest {
+public class  ResourceResolverTest {
 
     @Test
     public void scanClass() {

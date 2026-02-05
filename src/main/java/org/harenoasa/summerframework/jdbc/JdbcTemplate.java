@@ -2,6 +2,7 @@ package org.harenoasa.summerframework.jdbc;
 
 import jakarta.annotation.Nullable;
 import org.harenoasa.summerframework.entity.exception.DataAccessException;
+import org.harenoasa.summerframework.jdbc.tx.TransactionalUtils;
 
 import javax.sql.DataSource;
 import java.sql.*;
@@ -117,19 +118,20 @@ public class JdbcTemplate {
 
     public <T> T execute(ConnectionCallback<T> action) throws DataAccessException {
         // 获取新连接:
+        Connection currentCon = TransactionalUtils.getCurrentConnection();
+        if(currentCon !=null){
+            try {
+                return action.doInConnection(currentCon);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
         try (Connection newConn = dataSource.getConnection()) {
-            final boolean autoCommit = newConn.getAutoCommit();
-            if (!autoCommit) {
-                newConn.setAutoCommit(true);
-            }
-            T result = action.doInConnection(newConn);
-            if (!autoCommit) {
-                newConn.setAutoCommit(false);
-            }
-            return result;
-        } catch (SQLException e) {
+            return action.doInConnection(newConn);
+        }catch(SQLException e){
             throw new DataAccessException(e);
         }
+
     }
 
     private PreparedStatementCreator preparedStatementCreator(String sql, Object... args) {

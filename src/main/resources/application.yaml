@@ -4,6 +4,6 @@ app:
 summer:
   datasource:
     url: jdbc:mysql://localhost:3306/apseigyopoc
-    driver-class-name: org.sqlite.JDBC
-    username: sa
-    password:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: 111111
